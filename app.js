@@ -10,6 +10,7 @@ const addBtn = document.getElementById('addBtn');
 const listNameEl = document.getElementById('listName');
 const remainingEl = document.getElementById('remaining');
 const clearAllBtn = document.getElementById('clearAll');
+const clearCompletedBtn = document.getElementById('clearCompleted'); // <- wire this
 const shareBtn = document.getElementById('shareBtn');
 
 const fmt = (isoOrDate) => {
@@ -21,6 +22,11 @@ const qs = (k) => new URLSearchParams(location.search).get(k);
 let listId = null;
 let channel = null;
 
+function logErr(prefix, error) {
+  console.error(prefix, error);
+  alert(`${prefix}: ${error?.message || error}`);
+}
+
 async function ensureList() {
   let id = qs('list');
   if (id) return id;
@@ -31,10 +37,7 @@ async function ensureList() {
     .select('id')
     .single();
 
-  if (error) {
-    alert('Error creating list: ' + error.message);
-    throw error;
-  }
+  if (error) throw error;
   id = data.id;
   history.replaceState(null, '', `?list=${id}`);
   return id;
@@ -51,10 +54,11 @@ async function loadListName() {
 
 async function saveListName() {
   const name = listNameEl.value.trim() || 'Shopping List';
-  await supabase
+  const { error } = await supabase
     .from('lists')
     .update({ name, updated_at: new Date().toISOString() })
     .eq('id', listId);
+  if (error) logErr('Error saving list name', error);
 }
 
 async function loadItemsAndRender() {
@@ -63,10 +67,7 @@ async function loadItemsAndRender() {
     .select('*')
     .eq('list_id', listId)
     .order('created_at', { ascending: true });
-  if (error) {
-    console.error(error);
-    return;
-  }
+  if (error) return logErr('Error loading items', error);
   render(data || []);
 }
 
@@ -83,107 +84,9 @@ function subscribeRealtime() {
 }
 
 async function addItem() {
+  console.log('add clicked');
   const t = inputEl.value.trim();
   if (!t) return;
   const now = new Date().toISOString();
   const { error } = await supabase.from('items').insert({
     list_id: listId,
-    text: t,
-    done: false,
-    quantity: '',
-    note: '',
-    created_at: now,
-    updated_at: now,
-  });
-  if (error) return alert('Error adding item: ' + error.message);
-  inputEl.value = '';
-  inputEl.focus();
-}
-
-async function toggleDone(item) {
-  const now = new Date().toISOString();
-  const { error } = await supabase
-    .from('items')
-    .update({ done: !item.done, updated_at: now })
-    .eq('id', item.id);
-  if (error) alert('Error updating: ' + error.message);
-}
-
-async function editItem(item, newText) {
-  const now = new Date().toISOString();
-  const { error } = await supabase
-    .from('items')
-    .update({ text: newText, updated_at: now })
-    .eq('id', item.id);
-  if (error) alert('Error editing: ' + error.message);
-}
-
-async function removeItem(item) {
-  const { error } = await supabase.from('items').delete().eq('id', item.id);
-  if (error) alert('Error deleting: ' + error.message);
-}
-
-function render(items) {
-  remainingEl.textContent = `${items.filter(i => !i.done).length} remaining`;
-  listEl.innerHTML = '';
-
-  for (const item of items) {
-    const li = document.createElement('li');
-    li.className = 'card';
-
-    const row = document.createElement('div');
-    row.className = 'row';
-
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.className = 'checkbox';
-    cb.checked = !!item.done;
-    cb.onchange = () => toggleDone(item);
-
-    const text = document.createElement('input');
-    text.className = 'text' + (item.done ? ' strike' : '');
-    text.value = item.text || '';
-    text.onchange = () => editItem(item, text.value);
-
-    const del = document.createElement('button');
-    del.className = 'btn del';
-    del.textContent = 'Delete';
-    del.onclick = () => removeItem(item);
-
-    row.append(cb, text, del);
-
-    const meta = document.createElement('div');
-    meta.className = 'metaRow';
-    meta.innerHTML = `<div>Added: ${fmt(item.created_at)}</div><div>Updated: ${fmt(item.updated_at)}</div>`;
-
-    li.append(row, meta);
-    listEl.appendChild(li);
-  }
-}
-
-async function clearAll() {
-  if (!confirm('Clear all items?')) return;
-  const { error } = await supabase.from('items').delete().eq('list_id', listId);
-  if (error) alert('Error clearing: ' + error.message);
-}
-
-function share() {
-  const url = location.href;
-  navigator.clipboard?.writeText(url).then(
-    () => alert('Shareable link copied to clipboard'),
-    () => alert('Copy failed. Long-press and copy the URL.')
-  );
-}
-
-// Events
-addBtn.onclick = addItem;
-clearAllBtn.onclick = clearAll;
-shareBtn.onclick = share;
-listNameEl.addEventListener('blur', saveListName);
-
-(async function init() {
-  listId = await ensureList();
-  await loadListName();
-  await loadItemsAndRender();
-  subscribeRealtime();
-})();
