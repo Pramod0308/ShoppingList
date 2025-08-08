@@ -10,8 +10,8 @@ A deployable, collaborative shopping list web app (PWA). Works on any phone via 
 ## Quick deploy
 1) Create a Firebase project → Firestore (test mode for dev).
 2) In Project settings → General → Web app → copy the config.
-3) Duplicate `firebase-config.example.js` to `firebase-config.js` and replace the placeholder values with your project's config.
-   - Alternatively, load values from environment variables at build time and keep secrets in a local `.env` file.
+3) Duplicate `firebase-config.example.js` to `firebase-config.js` (gitignored) and replace the placeholder values with your project's config.
+   - Never commit the real keys; keep `firebase-config.js` local or load values from environment variables at build time (e.g. via a `.env` file).
 4) Deploy the folder anywhere (Netlify Drop, Vercel, Firebase Hosting).
 
 ### Firebase Hosting (one-time setup)
