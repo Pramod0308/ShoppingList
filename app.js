@@ -100,14 +100,16 @@ async function initList(listId) {
   inputEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') addBtn.click(); });
 
   // Clear completed
-  clearCompletedBtn.onclick = () => {
-    const checkboxes = document.querySelectorAll('.card input[type="checkbox"]');
-    // cheap way: toggle each and rely on update handler
-    checkboxes.forEach((cb) => {
-      if (cb.dataset.done === 'true') {
-        // simulate delete? we'll directly delete those items
+  clearCompletedBtn.onclick = async () => {
+    const items = listEl.querySelectorAll('li');
+    const deletions = [];
+    items.forEach((li) => {
+      const cb = li.querySelector('.checkbox');
+      if (cb?.checked) {
+        deletions.push(deleteDoc(doc(db, 'lists', listId, 'items', li.dataset.id)));
       }
     });
+    await Promise.all(deletions);
   };
 
   // Clear all
@@ -137,6 +139,7 @@ function render(items) {
   for (const item of items) {
     const li = document.createElement('li');
     li.className = 'card';
+    li.dataset.id = item.id;
 
     const row = document.createElement('div');
     row.className = 'row';
@@ -145,8 +148,7 @@ function render(items) {
     cb.type = 'checkbox';
     cb.className = 'checkbox';
     cb.checked = !!item.done;
-    cb.dataset.done = !!item.done ? 'true' : 'false';
-    cb.onchange = () => toggleDone(item);
+    cb.onchange = () => toggleDone(item.id, cb.checked);
 
     const text = document.createElement('input');
     text.className = 'text' + (item.done ? ' strike' : '');
@@ -169,10 +171,10 @@ function render(items) {
   }
 }
 
-async function toggleDone(item) {
-  const ref = doc(db, 'lists', listId, 'items', item.id);
+async function toggleDone(id, done) {
+  const ref = doc(db, 'lists', listId, 'items', id);
   await updateDoc(ref, {
-    done: !item.done,
+    done,
     updatedAt: serverTimestamp(),
     updatedBy: auth.currentUser?.uid || null
   });
