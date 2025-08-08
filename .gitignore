@@ -1,5 +1,2 @@
-# Local Firebase configuration (contains secrets)
-firebase-config.js
-
 # Environment variables
 .env
