@@ -100,14 +100,16 @@ async function initList(listId) {
   inputEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') addBtn.click(); });
 
   // Clear completed
-  clearCompletedBtn.onclick = () => {
-    const checkboxes = document.querySelectorAll('.card input[type="checkbox"]');
-    // cheap way: toggle each and rely on update handler
+  clearCompletedBtn.onclick = async () => {
+    const checkboxes = document.querySelectorAll('.checkbox');
+    const deletions = [];
     checkboxes.forEach((cb) => {
-      if (cb.dataset.done === 'true') {
-        // simulate delete? we'll directly delete those items
+      if (cb.checked) {
+        const id = cb.dataset.id;
+        deletions.push(deleteDoc(doc(db, 'lists', listId, 'items', id)));
       }
     });
+    await Promise.all(deletions);
   };
 
   // Clear all
@@ -145,7 +147,7 @@ function render(items) {
     cb.type = 'checkbox';
     cb.className = 'checkbox';
     cb.checked = !!item.done;
-    cb.dataset.done = !!item.done ? 'true' : 'false';
+    cb.dataset.id = item.id;
     cb.onchange = () => toggleDone(item);
 
     const text = document.createElement('input');
