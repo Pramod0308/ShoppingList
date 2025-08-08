@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shopping List</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <input id="listName" class="title" placeholder="List name" />
+      <button id="shareBtn" class="btn">Share link</button>
+    </header>
+
+    <section class="composer">
+      <input id="itemInput" class="input" placeholder="Add item" />
+      <button id="addBtn" class="btn primary">Add</button>
+    </section>
+
+    <section class="meta">
+      <span id="remaining"></span>
+      <div class="actions">
+        <button id="clearCompleted" class="btn">Clear completed</button>
+        <button id="clearAll" class="btn">Clear all</button>
+      </div>
+    </section>
+
+    <ul id="list" class="cards"></ul>
+
+    <footer class="footer">
+      <span id="whoami"></span>
+      <span> • </span>
+      <span>Offline-ready PWA</span>
+    </footer>
+  </div>
+
+  <noscript>This app needs JavaScript enabled.</noscript>
+  <script type="module" src="firebase-config.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
