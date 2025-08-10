@@ -10,7 +10,7 @@ const addBtn = document.getElementById('addBtn');
 const listNameEl = document.getElementById('listName');
 const remainingEl = document.getElementById('remaining');
 const clearAllBtn = document.getElementById('clearAll');
-const clearCompletedBtn = document.getElementById('clearCompleted'); // <- wire this
+const clearCompletedBtn = document.getElementById('clearCompleted');  // NEW
 const shareBtn = document.getElementById('shareBtn');
 
 const fmt = (isoOrDate) => {
@@ -84,9 +84,125 @@ function subscribeRealtime() {
 }
 
 async function addItem() {
-  console.log('add clicked');
   const t = inputEl.value.trim();
   if (!t) return;
   const now = new Date().toISOString();
   const { error } = await supabase.from('items').insert({
     list_id: listId,
+    text: t,
+    done: false,
+    quantity: '',
+    note: '',
+    created_at: now,
+    updated_at: now,
+  });
+  if (error) return logErr('Error adding item', error);
+  inputEl.value = '';
+  inputEl.focus();
+}
+
+async function toggleDone(item) {
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from('items')
+    .update({ done: !item.done, updated_at: now })
+    .eq('id', item.id);
+  if (error) logErr('Error updating item', error);
+}
+
+async function editItem(item, newText) {
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from('items')
+    .update({ text: newText, updated_at: now })
+    .eq('id', item.id);
+  if (error) logErr('Error editing item', error);
+}
+
+async function removeItem(item) {
+  const { error } = await supabase.from('items').delete().eq('id', item.id);
+  if (error) logErr('Error deleting item', error);
+}
+
+async function clearAll() {
+  if (!confirm('Clear all items?')) return;
+  const { error } = await supabase.from('items').delete().eq('list_id', listId);
+  if (error) logErr('Error clearing all', error);
+}
+
+async function clearCompleted() {                       // NEW
+  const { error } = await supabase
+    .from('items')
+    .delete()
+    .eq('list_id', listId)
+    .eq('done', true);
+  if (error) logErr('Error clearing completed', error);
+}
+
+function share() {
+  const url = location.href;
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(url)
+      .then(() => alert('Shareable link copied to clipboard'))
+      .catch(() => alert('Copy failed. Long-press and copy the URL.'));
+  } else {
+    prompt('Copy this link:', url); // fallback
+  }
+}
+
+function render(items) {
+  remainingEl.textContent = `${items.filter(i => !i.done).length} remaining`;
+  listEl.innerHTML = '';
+
+  for (const item of items) {
+    const li = document.createElement('li');
+    li.className = 'card';
+
+    const row = document.createElement('div');
+    row.className = 'row';
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'checkbox';
+    cb.checked = !!item.done;
+    cb.onchange = () => toggleDone(item);
+
+    const text = document.createElement('input');
+    text.className = 'text' + (item.done ? ' strike' : '');
+    text.value = item.text || '';
+    text.onchange = () => editItem(item, text.value);
+
+    const del = document.createElement('button');
+    del.className = 'btn del';
+    del.textContent = 'Delete';
+    del.onclick = () => removeItem(item);
+
+    row.append(cb, text, del);
+
+    const meta = document.createElement('div');
+    meta.className = 'metaRow';
+    meta.innerHTML = `<div>Added: ${fmt(item.created_at)}</div><div>Updated: ${fmt(item.updated_at)}</div>`;
+
+    li.append(row, meta);
+    listEl.appendChild(li);
+  }
+}
+
+// Wire up events (defensive checks)
+if (addBtn) addBtn.onclick = addItem;
+if (clearAllBtn) clearAllBtn.onclick = clearAll;
+if (clearCompletedBtn) clearCompletedBtn.onclick = clearCompleted;   // NEW
+if (shareBtn) shareBtn.onclick = share;
+if (listNameEl) listNameEl.addEventListener('blur', saveListName);
+
+// Init
+(async function init() {
+  try {
+    listId = await ensureList();
+    await loadListName();
+    await loadItemsAndRender();
+    subscribeRealtime();
+  } catch (e) {
+    logErr('Init failed', e);
+  }
+})();
