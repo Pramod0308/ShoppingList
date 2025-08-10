@@ -63,3 +63,58 @@ input:focus, button:focus {
   .title { font-size: 20px; }
 }
 
+/* ===== Home (All Lists) modern UI ===== */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.card-list {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 14px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.06);
+  transition: transform 120ms ease, box-shadow 120ms ease;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+.card-list:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(0,0,0,0.09); }
+
+.card-list .row-top {
+  display: flex; align-items: center; gap: 8px;
+}
+.card-list .drag {
+  cursor: grab;
+  user-select: none;
+  font-size: 18px;
+  opacity: .5;
+}
+.card-list h3 {
+  margin: 0; font-size: 16px; font-weight: 650; line-height: 1.2; flex: 1;
+}
+.card-list h3[contenteditable="true"] {
+  outline: 2px solid rgba(0,0,0,0.08);
+  border-radius: 8px; padding: 2px 6px; background: #fafafa;
+}
+.card-list .muted { color: var(--muted); font-size: 12px; margin-top: 6px; }
+
+.card-list .actions {
+  display: flex; gap: 8px; margin-top: 10px; justify-content: flex-end;
+}
+.icon-btn {
+  border: 1px solid var(--border);
+  background: var(--card);
+  padding: 8px 10px;
+  border-radius: 12px; cursor: pointer;
+  font-size: 13px;
+}
+.icon-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+.card-list.dragging { opacity: .6; transform: rotate(1deg); }
+
+#backHome { padding: 8px 10px; }
+
+
