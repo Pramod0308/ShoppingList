@@ -4,29 +4,32 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /* ---------- Elements (HOME) ---------- */
-const homeSection      = document.getElementById('home');
-const listsGrid        = document.getElementById('listsGrid');
-const newListNameEl    = document.getElementById('newListName');
-const createListBtn    = document.getElementById('createListBtn');
-const themeToggle      = document.getElementById('themeToggle');
+const homeSection       = document.getElementById('home');
+const listsGrid         = document.getElementById('listsGrid');
+const newListNameEl     = document.getElementById('newListName');
+const createListBtn     = document.getElementById('createListBtn');
+const themeToggle       = document.getElementById('themeToggle');
 
 /* ---------- Elements (LIST VIEW) ---------- */
-const listView         = document.getElementById('listView');
-const backHomeBtn      = document.getElementById('backHome');
-const listNameEl       = document.getElementById('listName');
-const shareBtn         = document.getElementById('shareBtn');
-const themeToggle2     = document.getElementById('themeToggle2');
-const toggleDatesBtn   = document.getElementById('toggleDates');
-const inputEl          = document.getElementById('itemInput');
-const addBtn           = document.getElementById('addBtn');
-const remainingEl      = document.getElementById('remaining');
-const clearAllBtn      = document.getElementById('clearAll');
-const clearCompletedBtn= document.getElementById('clearCompleted');
-const listEl           = document.getElementById('list');
+const listView          = document.getElementById('listView');
+const backHomeBtn       = document.getElementById('backHome');
+const listNameEl        = document.getElementById('listName');
+const shareBtn          = document.getElementById('shareBtn');
+const themeToggle2      = document.getElementById('themeToggle2');
+const toggleDatesBtn    = document.getElementById('toggleDates');
+const inputEl           = document.getElementById('itemInput');
+const addBtn            = document.getElementById('addBtn');
+const remainingEl       = document.getElementById('remaining');
+const clearAllBtn       = document.getElementById('clearAll');
+const clearCompletedBtn = document.getElementById('clearCompleted');
+const listEl            = document.getElementById('list');
 
 /* ---------- Helpers ---------- */
 const qs  = (k) => new URLSearchParams(location.search).get(k);
-const fmt = (iso) => { const d = iso ? new Date(iso) : null; return d && !isNaN(d.getTime()) ? d.toLocaleString() : '…'; };
+const fmt = (iso) => {
+  const d = iso ? new Date(iso) : null;
+  return d && !isNaN(d.getTime()) ? d.toLocaleString() : '…';
+};
 const root = document.documentElement;
 
 let listId = qs('list');
@@ -37,7 +40,8 @@ let listsChannel = null;
    THEME (dark / light)
    ============================================================ */
 function applyTheme(t) {
-  if (t === 'dark') root.classList.add('dark'); else root.classList.remove('dark');
+  if (t === 'dark') root.classList.add('dark');
+  else root.classList.remove('dark');
   localStorage.setItem('theme', t);
 }
 const storedTheme = localStorage.getItem('theme')
@@ -73,8 +77,8 @@ if (toggleDatesBtn) {
    HOME (lists)
    ============================================================ */
 async function createList() {
-  const name = (newListNameEl?.value || '').trim() || 'My Shopping List';
-  const now  = new Date().toISOString();
+  const name  = (newListNameEl?.value || '').trim() || 'My Shopping List';
+  const now   = new Date().toISOString();
   const order = Date.now(); // newest on top
   const { data, error } = await supabase
     .from('lists')
@@ -92,7 +96,7 @@ async function loadLists() {
     .select('*')
     .order('order_index', { ascending: false })
     .order('updated_at', { ascending: false });
-  if (error) { console.error('Error loading lists', error); return; }
+  if (error) return console.error('Error loading lists', error);
   renderLists(data || []);
 }
 
@@ -138,6 +142,7 @@ function renderLists(lists) {
     card.className = 'card-list';
     card.dataset.id = l.id;
 
+    // Top row: drag handle + editable title
     const rowTop = document.createElement('div');
     rowTop.className = 'row-top';
 
@@ -150,18 +155,30 @@ function renderLists(lists) {
     title.textContent = l.name || 'Untitled list';
     title.title = 'Double-click to rename. Enter to save.';
     title.contentEditable = 'false';
-    title.addEventListener('dblclick', () => { title.contentEditable = 'true'; title.focus(); document.execCommand('selectAll', false, null); });
-    title.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); title.blur(); } if (e.key === 'Escape') { title.contentEditable = 'false'; title.blur(); } });
+    title.addEventListener('dblclick', () => {
+      title.contentEditable = 'true';
+      title.focus();
+      document.execCommand('selectAll', false, null);
+    });
+    title.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); title.blur(); }
+      if (e.key === 'Escape') { title.contentEditable = 'false'; title.blur(); }
+    });
     title.addEventListener('blur', () => {
-      if (title.isContentEditable) { title.contentEditable = 'false'; renameList(l.id, title.textContent || ''); }
+      if (title.isContentEditable) {
+        title.contentEditable = 'false';
+        renameList(l.id, title.textContent || '');
+      }
     });
 
     rowTop.append(drag, title);
 
+    // Meta
     const meta = document.createElement('div');
     meta.className = 'muted';
     meta.textContent = `Updated: ${fmt(l.updated_at)} • Created: ${fmt(l.created_at)}`;
 
+    // Actions
     const actions = document.createElement('div');
     actions.className = 'actions';
 
@@ -182,14 +199,14 @@ function renderLists(lists) {
 
     actions.append(openBtn, shareBtn, deleteBtn);
 
-    // clicking the card opens it (unless a button was clicked)
+    // Open by clicking card (not the buttons)
     card.onclick = (e) => { if (!e.target.closest('.actions')) location.href = `${location.pathname}?list=${l.id}`; };
 
     card.append(rowTop, meta, actions);
     listsGrid.appendChild(card);
   }
 
-  // Long-press drag reorder on HOME (handle-only)
+  // Reorder: long-press on the dots only
   enableLongPressReorder(listsGrid, '.card-list', persistListOrder, '.drag');
   attachRipples();
 }
@@ -199,7 +216,7 @@ async function persistListOrder() {
   let base = Date.now() + 1000;
   for (let i = 0; i < cards.length; i++) {
     const id = cards[i].dataset.id;
-    const order_index = base - i; // descending so current visual order persists
+    const order_index = base - i;
     await supabase.from('lists').update({ order_index }).eq('id', id);
   }
 }
@@ -230,7 +247,7 @@ async function loadItemsAndRender() {
     .from('items')
     .select('*')
     .eq('list_id', listId)
-    .order('order_index', { ascending: false })  // use custom order
+    .order('order_index', { ascending: false })
     .order('created_at', { ascending: false });
   if (error) return console.error('Error loading items', error);
   renderItems(data || []);
@@ -256,6 +273,7 @@ function renderItems(items) {
     const row = document.createElement('div');
     row.className = 'row';
 
+    // 6-dot drag handle
     const handle = document.createElement('div');
     handle.className = 'drag handle';
     handle.innerHTML = '<span class="material-symbols-outlined">drag_indicator</span>';
@@ -287,7 +305,7 @@ function renderItems(items) {
     listEl.appendChild(li);
   }
 
-  // Long-press drag reorder for ITEMS (handle-only)
+  // Reorder items: long-press on the dots only
   enableLongPressReorder(listEl, '.card', persistItemsOrder, '.drag.handle');
   attachRipples();
 }
@@ -298,20 +316,33 @@ async function addItem() {
   if (!t) return;
   const now = new Date().toISOString();
   const { error } = await supabase.from('items').insert({
-    list_id: listId, text: t, done: false, quantity: '', note: '',
-    created_at: now, updated_at: now, order_index: Date.now()
+    list_id: listId,
+    text: t,
+    done: false,
+    quantity: '',
+    note: '',
+    created_at: now,
+    updated_at: now,
+    order_index: Date.now()
   });
   if (error) return alert('Error adding item: ' + error.message);
-  inputEl.value = ''; inputEl.focus();
+  inputEl.value = '';
+  inputEl.focus();
 }
 async function toggleDone(item) {
   const now = new Date().toISOString();
-  const { error } = await supabase.from('items').update({ done: !item.done, updated_at: now }).eq('id', item.id);
+  const { error } = await supabase
+    .from('items')
+    .update({ done: !item.done, updated_at: now })
+    .eq('id', item.id);
   if (error) alert('Error updating: ' + error.message);
 }
 async function editItem(item, newText) {
   const now = new Date().toISOString();
-  const { error } = await supabase.from('items').update({ text: newText, updated_at: now }).eq('id', item.id);
+  const { error } = await supabase
+    .from('items')
+    .update({ text: newText, updated_at: now })
+    .eq('id', item.id);
   if (error) alert('Error editing: ' + error.message);
 }
 async function removeItem(item) {
@@ -324,7 +355,11 @@ async function clearAll() {
   if (error) alert('Error clearing: ' + error.message);
 }
 async function clearCompleted() {
-  const { error } = await supabase.from('items').delete().eq('list_id', listId).eq('done', true);
+  const { error } = await supabase
+    .from('items')
+    .delete()
+    .eq('list_id', listId)
+    .eq('done', true);
   if (error) alert('Error clearing completed: ' + error.message);
 }
 
@@ -372,13 +407,10 @@ async function showListView() {
 }
 
 /* ============================================================
-   Long-press reorder helper (touch & mouse) with optional handle
+   Long-press reorder helper (touch & mouse, optional handle)
    ============================================================ */
 function enableLongPressReorder(container, itemSelector, onDrop, handleSelector = null) {
   if (!container) return;
-  // prevent double-binding on re-renders
-  if (container.dataset.lpAttached === '1') return;
-  container.dataset.lpAttached = '1';
 
   let pressTimer = null;
   let dragging = null;
@@ -402,6 +434,8 @@ function enableLongPressReorder(container, itemSelector, onDrop, handleSelector 
     pressTimer = setTimeout(() => {
       dragging = item;
       dragging.classList.add('dragging');
+      // optional haptic on mobile
+      if (navigator.vibrate) try { navigator.vibrate(8); } catch {}
       container.addEventListener('touchmove', preventScroll, { passive: false });
     }, 300); // long-press threshold
   };
@@ -448,6 +482,7 @@ function preventScroll(e) { e.preventDefault(); }
 
 function getDragAfterElement(container, y, itemSelector) {
   const els = [...container.querySelectorAll(`${itemSelector}:not(.dragging)`)];
+
   return els.reduce((closest, child) => {
     const box = child.getBoundingClientRect();
     const offset = y - box.top - box.height / 2;
