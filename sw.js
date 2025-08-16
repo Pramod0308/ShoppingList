@@ -1,4 +1,4 @@
-const CACHE = 'shopping-list-cache-v12'; // bump this when you deploy changes
+const CACHE = 'shopping-list-cache-v14'; // bump this when you deploy changes
 const ASSETS = [
   './',
   './index.html',
