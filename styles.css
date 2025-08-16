@@ -139,3 +139,35 @@ input:focus, button:focus { outline: 2px solid rgba(0,0,0,0.1); outline-offset: 
 /* Nice visual while dragging */
 .card.dragging, .card-list.dragging { opacity: .6; transform: scale(.995); }
 
+/* Drag handles (6-dot icon) */
+.drag, .drag.handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  cursor: grab;
+  user-select: none;
+  opacity: .7;
+}
+.drag:active, .drag.handle:active { cursor: grabbing; }
+.drag .material-symbols-outlined,
+.drag.handle .material-symbols-outlined { font-size: 20px; }
+
+/* While dragging */
+.card.dragging, .card-list.dragging { opacity: .6; transform: scale(.995); }
+
+/* Hide timestamps toggle keeps handle visible */
+.hide-meta .metaRow { display: none; }
+
+/* Mobile responsiveness */
+@media (max-width: 560px) {
+  .app { padding: 12px; }
+  .cards-grid { grid-template-columns: 1fr; } /* one card per row on small screens */
+  .composer { gap: 6px; }
+  .icon-btn, .btn { padding: 10px 12px; }
+  .row { gap: 8px; }
+}
+
+
