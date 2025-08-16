@@ -17,7 +17,7 @@ const listNameEl        = document.getElementById('listName');
 const shareBtn          = document.getElementById('shareBtn');
 const themeToggle2      = document.getElementById('themeToggle2');
 const toggleDatesBtn    = document.getElementById('toggleDates');
-const inputEl           = document.getElementById('itemInput');
+const inputEl           = document.getElementById('itemInput');      // textarea now
 const addBtn            = document.getElementById('addBtn');
 const remainingEl       = document.getElementById('remaining');
 const clearAllBtn       = document.getElementById('clearAll');
@@ -31,10 +31,12 @@ const fmt = (iso) => {
   return d && !isNaN(d.getTime()) ? d.toLocaleString() : '…';
 };
 const root = document.documentElement;
+const nowIso = () => new Date().toISOString();
 
 let listId = qs('list');
 let itemsChannel = null;
 let listsChannel = null;
+let itemsCache = []; // in-memory items for instant UI
 
 /* ============================================================
    THEME (dark / light)
@@ -78,7 +80,7 @@ if (toggleDatesBtn) {
    ============================================================ */
 async function createList() {
   const name  = (newListNameEl?.value || '').trim() || 'My Shopping List';
-  const now   = new Date().toISOString();
+  const now   = nowIso();
   const order = Date.now(); // newest on top
   const { data, error } = await supabase
     .from('lists')
@@ -121,7 +123,7 @@ async function renameList(id, newName) {
   const name = (newName || '').trim() || 'Untitled list';
   const { error } = await supabase
     .from('lists')
-    .update({ name, updated_at: new Date().toISOString() })
+    .update({ name, updated_at: nowIso() })
     .eq('id', id);
   if (error) alert('Error renaming list: ' + error.message);
 }
@@ -142,7 +144,6 @@ function renderLists(lists) {
     card.className = 'card-list';
     card.dataset.id = l.id;
 
-    // Top row: drag handle + editable title
     const rowTop = document.createElement('div');
     rowTop.className = 'row-top';
 
@@ -173,12 +174,10 @@ function renderLists(lists) {
 
     rowTop.append(drag, title);
 
-    // Meta
     const meta = document.createElement('div');
     meta.className = 'muted';
     meta.textContent = `Updated: ${fmt(l.updated_at)} • Created: ${fmt(l.created_at)}`;
 
-    // Actions
     const actions = document.createElement('div');
     actions.className = 'actions';
 
@@ -199,14 +198,12 @@ function renderLists(lists) {
 
     actions.append(openBtn, shareBtn, deleteBtn);
 
-    // Open by clicking card (not the buttons)
     card.onclick = (e) => { if (!e.target.closest('.actions')) location.href = `${location.pathname}?list=${l.id}`; };
 
     card.append(rowTop, meta, actions);
     listsGrid.appendChild(card);
   }
 
-  // Reorder: long-press on the dots only
   enableLongPressReorder(listsGrid, '.card-list', persistListOrder, '.drag');
   attachRipples();
 }
@@ -230,7 +227,7 @@ function subscribeListsRealtime() {
 }
 
 /* ============================================================
-   LIST VIEW (items)
+   LIST VIEW (items) — Keep-like add + instant sorting
    ============================================================ */
 async function loadListName() {
   const { data } = await supabase.from('lists').select('name').eq('id', listId).single();
@@ -239,26 +236,27 @@ async function loadListName() {
 
 async function saveListName() {
   const name = listNameEl.value.trim() || 'Shopping List';
-  await supabase.from('lists').update({ name, updated_at: new Date().toISOString() }).eq('id', listId);
+  await supabase.from('lists').update({ name, updated_at: nowIso() }).eq('id', listId);
+}
+
+function sortItems(arr) {
+  // Active (done=false) first; within each group by order_index desc, then created desc
+  return arr.slice().sort((a,b) => {
+    if (!!a.done !== !!b.done) return a.done ? 1 : -1;
+    const oi = (b.order_index ?? 0) - (a.order_index ?? 0);
+    if (oi !== 0) return oi;
+    return (new Date(b.created_at) - new Date(a.created_at));
+  });
 }
 
 async function loadItemsAndRender() {
   const { data, error } = await supabase
     .from('items')
     .select('*')
-    .eq('list_id', listId)
-    .order('order_index', { ascending: false })
-    .order('created_at', { ascending: false });
+    .eq('list_id', listId);
   if (error) return console.error('Error loading items', error);
-  renderItems(data || []);
-}
-
-function subscribeItemsRealtime() {
-  if (itemsChannel) supabase.removeChannel(itemsChannel);
-  itemsChannel = supabase
-    .channel(`list_${listId}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: `list_id=eq.${listId}` }, () => loadItemsAndRender())
-    .subscribe();
+  itemsCache = sortItems(data || []);
+  renderItems(itemsCache);
 }
 
 function renderItems(items) {
@@ -283,17 +281,17 @@ function renderItems(items) {
     cb.type = 'checkbox';
     cb.className = 'checkbox';
     cb.checked = !!item.done;
-    cb.onchange = () => toggleDone(item);
+    cb.onchange = () => toggleDoneOptimistic(item);
 
     const text = document.createElement('input');
     text.className = 'text' + (item.done ? ' strike' : '');
     text.value = item.text || '';
-    text.onchange = () => editItem(item, text.value);
+    text.onchange = () => editItemOptimistic(item, text.value);
 
     const del = document.createElement('button');
     del.className = 'btn del';
     del.textContent = 'Delete';
-    del.onclick = () => removeItem(item);
+    del.onclick = () => removeItemOptimistic(item);
 
     row.append(handle, cb, text, del);
 
@@ -305,17 +303,51 @@ function renderItems(items) {
     listEl.appendChild(li);
   }
 
-  // Reorder items: long-press on the dots only
   enableLongPressReorder(listEl, '.card', persistItemsOrder, '.drag.handle');
   attachRipples();
 }
 
-/* ---------- Item Ops ---------- */
-async function addItem() {
-  const t = inputEl.value.trim();
-  if (!t) return;
-  const now = new Date().toISOString();
-  const { error } = await supabase.from('items').insert({
+function subscribeItemsRealtime() {
+  if (itemsChannel) supabase.removeChannel(itemsChannel);
+  itemsChannel = supabase
+    .channel(`list_${listId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: `list_id=eq.${listId}` }, () => loadItemsAndRender())
+    .subscribe();
+}
+
+/* ---------- Keep-like adding from textarea ---------- */
+function autoResizeTextarea(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = Math.min(200, el.scrollHeight) + 'px'; // cap height
+}
+autoResizeTextarea(inputEl);
+if (inputEl) {
+  inputEl.addEventListener('input', () => autoResizeTextarea(inputEl));
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      addFromTextarea();
+    }
+  });
+}
+
+function getLinesFromTextarea() {
+  const raw = (inputEl?.value || '').replace(/\r\n/g, '\n');
+  return raw.split('\n').map(s => s.trim()).filter(Boolean);
+}
+
+async function addFromTextarea() {
+  const lines = getLinesFromTextarea();
+  if (!lines.length) return;
+  inputEl.value = '';
+  autoResizeTextarea(inputEl);
+
+  // optimistic add to cache
+  const baseTime = Date.now();
+  const now = nowIso();
+  const optimistic = lines.map((t, idx) => ({
+    id: 'tmp-' + baseTime + '-' + idx,
     list_id: listId,
     text: t,
     done: false,
@@ -323,53 +355,128 @@ async function addItem() {
     note: '',
     created_at: now,
     updated_at: now,
-    order_index: Date.now()
-  });
-  if (error) return alert('Error adding item: ' + error.message);
-  inputEl.value = '';
-  inputEl.focus();
+    order_index: baseTime + (lines.length - idx) // keep typed order
+  }));
+  itemsCache = sortItems([...optimistic, ...itemsCache]);
+  renderItems(itemsCache);
+
+  // persist
+  const rows = lines.map((t, idx) => ({
+    list_id: listId, text: t, done: false, quantity: '', note: '',
+    created_at: now, updated_at: now,
+    order_index: baseTime + (lines.length - idx)
+  }));
+  const { error } = await supabase.from('items').insert(rows);
+  if (error) {
+    alert('Error adding: ' + error.message);
+    loadItemsAndRender(); // revert
+  }
 }
-async function toggleDone(item) {
-  const now = new Date().toISOString();
+
+/* ---------- Item ops (optimistic) ---------- */
+async function toggleDoneOptimistic(item) {
+  // optimistic: flip + move
+  const idx = itemsCache.findIndex(i => i.id === item.id);
+  if (idx === -1) return;
+  const updated = { ...itemsCache[idx], done: !itemsCache[idx].done, updated_at: nowIso(), order_index: Date.now() };
+  itemsCache.splice(idx, 1, updated);
+  itemsCache = sortItems(itemsCache);
+  renderItems(itemsCache);
+
   const { error } = await supabase
     .from('items')
-    .update({ done: !item.done, updated_at: now })
-    .eq('id', item.id);
-  if (error) alert('Error updating: ' + error.message);
+    .update({ done: updated.done, updated_at: updated.updated_at, order_index: updated.order_index })
+    .eq('id', updated.id);
+  if (error) {
+    alert('Update failed: ' + error.message);
+    loadItemsAndRender();
+  }
 }
-async function editItem(item, newText) {
-  const now = new Date().toISOString();
+
+async function editItemOptimistic(item, newText) {
+  const idx = itemsCache.findIndex(i => i.id === item.id);
+  if (idx === -1) return;
+  const updated = { ...itemsCache[idx], text: newText, updated_at: nowIso() };
+  itemsCache.splice(idx, 1, updated);
+  renderItems(itemsCache);
+
   const { error } = await supabase
     .from('items')
-    .update({ text: newText, updated_at: now })
-    .eq('id', item.id);
-  if (error) alert('Error editing: ' + error.message);
+    .update({ text: newText, updated_at: updated.updated_at })
+    .eq('id', updated.id);
+  if (error) {
+    alert('Edit failed: ' + error.message);
+    loadItemsAndRender();
+  }
 }
-async function removeItem(item) {
+
+async function removeItemOptimistic(item) {
+  const idx = itemsCache.findIndex(i => i.id === item.id);
+  if (idx === -1) return;
+  const backup = itemsCache[idx];
+  itemsCache.splice(idx, 1);
+  renderItems(itemsCache);
+
   const { error } = await supabase.from('items').delete().eq('id', item.id);
-  if (error) alert('Error deleting: ' + error.message);
+  if (error) {
+    alert('Delete failed: ' + error.message);
+    itemsCache.splice(idx, 0, backup);
+    renderItems(itemsCache);
+  }
 }
+
 async function clearAll() {
   if (!confirm('Clear all items?')) return;
+  const backup = itemsCache.slice();
+  itemsCache = [];
+  renderItems(itemsCache);
+
   const { error } = await supabase.from('items').delete().eq('list_id', listId);
-  if (error) alert('Error clearing: ' + error.message);
+  if (error) {
+    alert('Clear failed: ' + error.message);
+    itemsCache = backup;
+    renderItems(itemsCache);
+  }
 }
+
 async function clearCompleted() {
+  const backup = itemsCache.slice();
+  itemsCache = itemsCache.filter(i => !i.done);
+  renderItems(itemsCache);
+
   const { error } = await supabase
     .from('items')
     .delete()
     .eq('list_id', listId)
     .eq('done', true);
-  if (error) alert('Error clearing completed: ' + error.message);
+  if (error) {
+    alert('Clear completed failed: ' + error.message);
+    itemsCache = backup;
+    renderItems(itemsCache);
+  }
 }
 
 async function persistItemsOrder() {
   const cards = [...listEl.querySelectorAll('.card')];
   let base = Date.now() + 1000;
+  const idToOrder = new Map();
   for (let i = 0; i < cards.length; i++) {
     const id = cards[i].dataset.id;
-    const order_index = base - i;
-    await supabase.from('items').update({ order_index }).eq('id', id);
+    idToOrder.set(id, base - i);
+  }
+  // optimistic reorder in cache
+  itemsCache = itemsCache.map(i => idToOrder.has(i.id) ? { ...i, order_index: idToOrder.get(i.id) } : i);
+  itemsCache = sortItems(itemsCache);
+  renderItems(itemsCache);
+
+  // persist sequentially (simple & reliable)
+  for (const [id, order_index] of idToOrder.entries()) {
+    const { error } = await supabase.from('items').update({ order_index }).eq('id', id);
+    if (error) {
+      console.error('Order update failed for', id, error);
+      loadItemsAndRender();
+      break;
+    }
   }
 }
 
@@ -407,7 +514,7 @@ async function showListView() {
 }
 
 /* ============================================================
-   Long-press reorder helper (touch & mouse, optional handle)
+   Long-press reorder helper (touch & mouse, with handle)
    ============================================================ */
 function enableLongPressReorder(container, itemSelector, onDrop, handleSelector = null) {
   if (!container) return;
@@ -434,8 +541,7 @@ function enableLongPressReorder(container, itemSelector, onDrop, handleSelector 
     pressTimer = setTimeout(() => {
       dragging = item;
       dragging.classList.add('dragging');
-      // optional haptic on mobile
-      if (navigator.vibrate) try { navigator.vibrate(8); } catch {}
+      if (navigator.vibrate) { try { navigator.vibrate(8); } catch {} }
       container.addEventListener('touchmove', preventScroll, { passive: false });
     }, 300); // long-press threshold
   };
@@ -445,7 +551,6 @@ function enableLongPressReorder(container, itemSelector, onDrop, handleSelector 
 
     const y = e.clientY || (e.touches && e.touches[0]?.clientY) || 0;
     if (!dragging) {
-      // treat as scroll if moved before long-press triggers
       if (Math.abs(y - startY) > 8) { clearTimeout(pressTimer); pressTimer = null; }
       return;
     }
@@ -513,7 +618,7 @@ function attachRipples() {
 if (createListBtn)      createListBtn.onclick = createList;
 if (backHomeBtn)        backHomeBtn.onclick = goHome;
 
-if (addBtn)             addBtn.onclick = addItem;
+if (addBtn)             addBtn.onclick = addFromTextarea;
 if (clearAllBtn)        clearAllBtn.onclick = clearAll;
 if (clearCompletedBtn)  clearCompletedBtn.onclick = clearCompleted;
 if (shareBtn)           shareBtn.onclick = share;
