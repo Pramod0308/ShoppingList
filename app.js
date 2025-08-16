@@ -182,14 +182,15 @@ function renderLists(lists) {
 
     actions.append(openBtn, shareBtn, deleteBtn);
 
+    // clicking the card opens it (unless a button was clicked)
     card.onclick = (e) => { if (!e.target.closest('.actions')) location.href = `${location.pathname}?list=${l.id}`; };
 
     card.append(rowTop, meta, actions);
     listsGrid.appendChild(card);
   }
 
-  // Enable long-press drag reorder on mobile + mouse drag fallback
-  enableLongPressReorder(listsGrid, '.card-list', persistListOrder);
+  // Long-press drag reorder on HOME (handle-only)
+  enableLongPressReorder(listsGrid, '.card-list', persistListOrder, '.drag');
   attachRipples();
 }
 
@@ -198,7 +199,7 @@ async function persistListOrder() {
   let base = Date.now() + 1000;
   for (let i = 0; i < cards.length; i++) {
     const id = cards[i].dataset.id;
-    const order_index = base - i;
+    const order_index = base - i; // descending so current visual order persists
     await supabase.from('lists').update({ order_index }).eq('id', id);
   }
 }
@@ -229,7 +230,7 @@ async function loadItemsAndRender() {
     .from('items')
     .select('*')
     .eq('list_id', listId)
-    .order('order_index', { ascending: false })  // use custom order first
+    .order('order_index', { ascending: false })  // use custom order
     .order('created_at', { ascending: false });
   if (error) return console.error('Error loading items', error);
   renderItems(data || []);
@@ -255,6 +256,11 @@ function renderItems(items) {
     const row = document.createElement('div');
     row.className = 'row';
 
+    const handle = document.createElement('div');
+    handle.className = 'drag handle';
+    handle.innerHTML = '<span class="material-symbols-outlined">drag_indicator</span>';
+    handle.title = 'Long-press and drag to reorder';
+
     const cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.className = 'checkbox';
@@ -271,7 +277,7 @@ function renderItems(items) {
     del.textContent = 'Delete';
     del.onclick = () => removeItem(item);
 
-    row.append(cb, text, del);
+    row.append(handle, cb, text, del);
 
     const meta = document.createElement('div');
     meta.className = 'metaRow';
@@ -281,8 +287,8 @@ function renderItems(items) {
     listEl.appendChild(li);
   }
 
-  // Enable long-press drag reorder for items
-  enableLongPressReorder(listEl, '.card', persistItemsOrder);
+  // Long-press drag reorder for ITEMS (handle-only)
+  enableLongPressReorder(listEl, '.card', persistItemsOrder, '.drag.handle');
   attachRipples();
 }
 
@@ -366,23 +372,29 @@ async function showListView() {
 }
 
 /* ============================================================
-   Long-press reorder helper (touch & mouse)
+   Long-press reorder helper (touch & mouse) with optional handle
    ============================================================ */
-function enableLongPressReorder(container, itemSelector, onDrop) {
+function enableLongPressReorder(container, itemSelector, onDrop, handleSelector = null) {
   if (!container) return;
+  // prevent double-binding on re-renders
+  if (container.dataset.lpAttached === '1') return;
+  container.dataset.lpAttached = '1';
 
   let pressTimer = null;
   let dragging = null;
   let startY = 0;
   let moved = false;
 
-  const isInteractive = (el) => {
-    return el.closest('button, input, textarea, select, a, [contenteditable="true"]');
-  };
+  const isInteractive = (el) =>
+    el.closest('button, input, textarea, select, a, [contenteditable="true"]');
 
   const pointerDown = (e) => {
     const item = e.target.closest(itemSelector);
-    if (!item || isInteractive(e.target)) return;
+    if (!item) return;
+
+    // If a handle is specified, only start from the handle
+    if (handleSelector && !e.target.closest(handleSelector)) return;
+    if (isInteractive(e.target)) return;
 
     startY = e.clientY || (e.touches && e.touches[0]?.clientY) || 0;
     moved = false;
@@ -390,7 +402,6 @@ function enableLongPressReorder(container, itemSelector, onDrop) {
     pressTimer = setTimeout(() => {
       dragging = item;
       dragging.classList.add('dragging');
-      // while dragging, block page scroll on touch
       container.addEventListener('touchmove', preventScroll, { passive: false });
     }, 300); // long-press threshold
   };
@@ -400,10 +411,8 @@ function enableLongPressReorder(container, itemSelector, onDrop) {
 
     const y = e.clientY || (e.touches && e.touches[0]?.clientY) || 0;
     if (!dragging) {
-      // if user moves finger before long press triggers, cancel (they’re scrolling)
-      if (Math.abs(y - startY) > 8) {
-        clearTimeout(pressTimer); pressTimer = null;
-      }
+      // treat as scroll if moved before long-press triggers
+      if (Math.abs(y - startY) > 8) { clearTimeout(pressTimer); pressTimer = null; }
       return;
     }
 
@@ -425,7 +434,6 @@ function enableLongPressReorder(container, itemSelector, onDrop) {
     }
   };
 
-  // event delegation
   container.addEventListener('mousedown', pointerDown);
   container.addEventListener('touchstart', pointerDown, { passive: true });
   container.addEventListener('mousemove', pointerMove);
@@ -440,7 +448,6 @@ function preventScroll(e) { e.preventDefault(); }
 
 function getDragAfterElement(container, y, itemSelector) {
   const els = [...container.querySelectorAll(`${itemSelector}:not(.dragging)`)];
-
   return els.reduce((closest, child) => {
     const box = child.getBoundingClientRect();
     const offset = y - box.top - box.height / 2;
