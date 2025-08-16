@@ -202,4 +202,19 @@ input:focus, button:focus { outline: 2px solid rgba(0,0,0,0.1); outline-offset: 
 /* Hide timestamps but keep handle visible */
 .hide-meta .metaRow { display:none; }
 
+/* Keep-like expanding input */
+.input.textarea {
+  resize: none;
+  overflow: hidden;
+  min-height: 44px;
+  line-height: 1.35;
+}
+
+/* Done items go dimmer */
+.strike { text-decoration: line-through; color:#9ca3af; }
+
+/* Ensure appbar actions fit on tiny screens */
+.appbar { flex-wrap: wrap; }
+
+
 
