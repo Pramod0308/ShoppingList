@@ -17,7 +17,7 @@ const listNameEl        = document.getElementById('listName');
 const shareBtn          = document.getElementById('shareBtn');
 const themeToggle2      = document.getElementById('themeToggle2');
 const toggleDatesBtn    = document.getElementById('toggleDates');
-const inputEl           = document.getElementById('itemInput');      // textarea now
+const inputEl           = document.getElementById('itemInput');      // textarea (Keep-like)
 const addBtn            = document.getElementById('addBtn');
 const remainingEl       = document.getElementById('remaining');
 const clearAllBtn       = document.getElementById('clearAll');
@@ -30,13 +30,13 @@ const fmt = (iso) => {
   const d = iso ? new Date(iso) : null;
   return d && !isNaN(d.getTime()) ? d.toLocaleString() : '…';
 };
-const root = document.documentElement;
+const root   = document.documentElement;
 const nowIso = () => new Date().toISOString();
 
 let listId = qs('list');
 let itemsChannel = null;
 let listsChannel = null;
-let itemsCache = []; // in-memory items for instant UI
+let itemsCache = []; // in-memory items for buttery UI
 
 /* ============================================================
    THEME (dark / light)
@@ -144,6 +144,7 @@ function renderLists(lists) {
     card.className = 'card-list';
     card.dataset.id = l.id;
 
+    // Top row: drag handle + editable title
     const rowTop = document.createElement('div');
     rowTop.className = 'row-top';
 
@@ -198,12 +199,14 @@ function renderLists(lists) {
 
     actions.append(openBtn, shareBtn, deleteBtn);
 
+    // Open by clicking card (not the buttons)
     card.onclick = (e) => { if (!e.target.closest('.actions')) location.href = `${location.pathname}?list=${l.id}`; };
 
     card.append(rowTop, meta, actions);
     listsGrid.appendChild(card);
   }
 
+  // Reorder: long-press on the dots only
   enableLongPressReorder(listsGrid, '.card-list', persistListOrder, '.drag');
   attachRipples();
 }
@@ -286,7 +289,16 @@ function renderItems(items) {
     const text = document.createElement('input');
     text.className = 'text' + (item.done ? ' strike' : '');
     text.value = item.text || '';
+    text.setAttribute('enterkeyhint', 'enter');   // mobile keyboard shows “Enter”
+    text.autocomplete = 'off';
     text.onchange = () => editItemOptimistic(item, text.value);
+    // Enter while editing creates a new blank item just below
+    text.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        addEmptyItemAfter(item);
+      }
+    });
 
     const del = document.createElement('button');
     del.className = 'btn del';
@@ -303,6 +315,7 @@ function renderItems(items) {
     listEl.appendChild(li);
   }
 
+  // Reorder items: long-press on the dots only
   enableLongPressReorder(listEl, '.card', persistItemsOrder, '.drag.handle');
   attachRipples();
 }
@@ -315,11 +328,13 @@ function subscribeItemsRealtime() {
     .subscribe();
 }
 
-/* ---------- Keep-like adding from textarea ---------- */
+/* ---------- Keep-like composer (textarea) ---------- */
+if (inputEl) inputEl.setAttribute('enterkeyhint','enter');
+
 function autoResizeTextarea(el) {
   if (!el) return;
   el.style.height = 'auto';
-  el.style.height = Math.min(200, el.scrollHeight) + 'px'; // cap height
+  el.style.height = Math.min(200, el.scrollHeight) + 'px'; // cap
 }
 autoResizeTextarea(inputEl);
 if (inputEl) {
@@ -369,13 +384,61 @@ async function addFromTextarea() {
   const { error } = await supabase.from('items').insert(rows);
   if (error) {
     alert('Error adding: ' + error.message);
-    loadItemsAndRender(); // revert
+    loadItemsAndRender(); // revert to server state
   }
+}
+
+/* ---------- Enter in an item → add blank row below ---------- */
+async function addEmptyItemAfter(item) {
+  const idx = itemsCache.findIndex(i => i.id === item.id);
+  if (idx === -1) return;
+
+  const now = nowIso();
+  const order_index = (itemsCache[idx].order_index ?? Date.now()) - 1;
+
+  // Optimistic insert
+  const tempId = 'tmp-' + Date.now();
+  const optimistic = {
+    id: tempId, list_id: listId, text: '', done: false,
+    quantity: '', note: '', created_at: now, updated_at: now, order_index
+  };
+  itemsCache.splice(idx + 1, 0, optimistic);
+  itemsCache = sortItems(itemsCache);
+  renderItems(itemsCache);
+
+  // Focus the new blank input
+  setTimeout(() => {
+    const el = listEl.querySelector(`.card[data-id="${tempId}"] .text`);
+    if (el) el.focus();
+  }, 0);
+
+  // Persist
+  const { data, error } = await supabase
+    .from('items')
+    .insert({
+      list_id: listId, text: '', done: false,
+      quantity: '', note: '',
+      created_at: now, updated_at: now, order_index
+    })
+    .select('id')
+    .single();
+
+  if (error) {
+    // Revert optimistic change
+    itemsCache = itemsCache.filter(i => i.id !== tempId);
+    renderItems(itemsCache);
+    alert('Could not add new line: ' + error.message);
+    return;
+  }
+
+  // Replace temp id with real id (keep UI stable)
+  const newId = data?.id;
+  const it = itemsCache.find(i => i.id === tempId);
+  if (it && newId) it.id = newId;
 }
 
 /* ---------- Item ops (optimistic) ---------- */
 async function toggleDoneOptimistic(item) {
-  // optimistic: flip + move
   const idx = itemsCache.findIndex(i => i.id === item.id);
   if (idx === -1) return;
   const updated = { ...itemsCache[idx], done: !itemsCache[idx].done, updated_at: nowIso(), order_index: Date.now() };
@@ -469,7 +532,7 @@ async function persistItemsOrder() {
   itemsCache = sortItems(itemsCache);
   renderItems(itemsCache);
 
-  // persist sequentially (simple & reliable)
+  // persist sequentially
   for (const [id, order_index] of idToOrder.entries()) {
     const { error } = await supabase.from('items').update({ order_index }).eq('id', id);
     if (error) {
@@ -514,7 +577,7 @@ async function showListView() {
 }
 
 /* ============================================================
-   Long-press reorder helper (touch & mouse, with handle)
+   Long-press reorder helper (touch & mouse, optional handle)
    ============================================================ */
 function enableLongPressReorder(container, itemSelector, onDrop, handleSelector = null) {
   if (!container) return;
@@ -541,6 +604,7 @@ function enableLongPressReorder(container, itemSelector, onDrop, handleSelector 
     pressTimer = setTimeout(() => {
       dragging = item;
       dragging.classList.add('dragging');
+      // optional haptic on mobile
       if (navigator.vibrate) { try { navigator.vibrate(8); } catch {} }
       container.addEventListener('touchmove', preventScroll, { passive: false });
     }, 300); // long-press threshold
@@ -551,6 +615,7 @@ function enableLongPressReorder(container, itemSelector, onDrop, handleSelector 
 
     const y = e.clientY || (e.touches && e.touches[0]?.clientY) || 0;
     if (!dragging) {
+      // treat as scroll if moved before long-press triggers
       if (Math.abs(y - startY) > 8) { clearTimeout(pressTimer); pressTimer = null; }
       return;
     }
