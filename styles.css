@@ -132,3 +132,10 @@ input:focus, button:focus { outline: 2px solid rgba(0,0,0,0.1); outline-offset: 
   .title { font-size: 20px; }
   .cards-grid { grid-template-columns: 1fr 1fr; }
 }
+
+/* Hide item timestamps when toggled off */
+.hide-meta .metaRow { display: none; }
+
+/* Nice visual while dragging */
+.card.dragging, .card-list.dragging { opacity: .6; transform: scale(.995); }
+
