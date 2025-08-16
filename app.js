@@ -16,6 +16,7 @@ const backHomeBtn      = document.getElementById('backHome');
 const listNameEl       = document.getElementById('listName');
 const shareBtn         = document.getElementById('shareBtn');
 const themeToggle2     = document.getElementById('themeToggle2');
+const toggleDatesBtn   = document.getElementById('toggleDates');
 const inputEl          = document.getElementById('itemInput');
 const addBtn           = document.getElementById('addBtn');
 const remainingEl      = document.getElementById('remaining');
@@ -25,10 +26,7 @@ const listEl           = document.getElementById('list');
 
 /* ---------- Helpers ---------- */
 const qs  = (k) => new URLSearchParams(location.search).get(k);
-const fmt = (iso) => {
-  const d = iso ? new Date(iso) : null;
-  return d && !isNaN(d.getTime()) ? d.toLocaleString() : '…';
-};
+const fmt = (iso) => { const d = iso ? new Date(iso) : null; return d && !isNaN(d.getTime()) ? d.toLocaleString() : '…'; };
 const root = document.documentElement;
 
 let listId = qs('list');
@@ -48,6 +46,28 @@ applyTheme(storedTheme);
 [themeToggle, themeToggle2].forEach(b => b && (b.onclick = () => {
   applyTheme(root.classList.contains('dark') ? 'light' : 'dark');
 }));
+
+/* ============================================================
+   TIMESTAMPS TOGGLE (show/hide)
+   ============================================================ */
+let showTimestamps = localStorage.getItem('showTimestamps') !== '0'; // default ON
+function applyTimestampPref() {
+  document.body.classList.toggle('hide-meta', !showTimestamps);
+  if (toggleDatesBtn) {
+    toggleDatesBtn.title = showTimestamps ? 'Hide timestamps' : 'Show timestamps';
+    toggleDatesBtn.innerHTML = showTimestamps
+      ? '<span class="material-symbols-outlined">schedule</span>'
+      : '<span class="material-symbols-outlined">visibility_off</span>';
+  }
+}
+applyTimestampPref();
+if (toggleDatesBtn) {
+  toggleDatesBtn.onclick = () => {
+    showTimestamps = !showTimestamps;
+    localStorage.setItem('showTimestamps', showTimestamps ? '1' : '0');
+    applyTimestampPref();
+  };
+}
 
 /* ============================================================
    HOME (lists)
@@ -72,10 +92,7 @@ async function loadLists() {
     .select('*')
     .order('order_index', { ascending: false })
     .order('updated_at', { ascending: false });
-  if (error) {
-    console.error('Error loading lists', error);
-    return;
-  }
+  if (error) { console.error('Error loading lists', error); return; }
   renderLists(data || []);
 }
 
@@ -119,39 +136,32 @@ function renderLists(lists) {
   for (const l of lists) {
     const card = document.createElement('div');
     card.className = 'card-list';
-    card.draggable = true;
     card.dataset.id = l.id;
 
-    // top row: drag + editable title
     const rowTop = document.createElement('div');
     rowTop.className = 'row-top';
 
     const drag = document.createElement('div');
     drag.className = 'drag';
     drag.innerHTML = '<span class="material-symbols-outlined">drag_indicator</span>';
-    drag.title = 'Drag to reorder';
+    drag.title = 'Long-press and drag to reorder';
 
     const title = document.createElement('h3');
     title.textContent = l.name || 'Untitled list';
-    title.title = 'Double-click to rename. Press Enter to save.';
+    title.title = 'Double-click to rename. Enter to save.';
     title.contentEditable = 'false';
     title.addEventListener('dblclick', () => { title.contentEditable = 'true'; title.focus(); document.execCommand('selectAll', false, null); });
     title.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); title.blur(); } if (e.key === 'Escape') { title.contentEditable = 'false'; title.blur(); } });
     title.addEventListener('blur', () => {
-      if (title.isContentEditable) {
-        title.contentEditable = 'false';
-        renameList(l.id, title.textContent || '');
-      }
+      if (title.isContentEditable) { title.contentEditable = 'false'; renameList(l.id, title.textContent || ''); }
     });
 
     rowTop.append(drag, title);
 
-    // meta
     const meta = document.createElement('div');
     meta.className = 'muted';
     meta.textContent = `Updated: ${fmt(l.updated_at)} • Created: ${fmt(l.created_at)}`;
 
-    // actions
     const actions = document.createElement('div');
     actions.className = 'actions';
 
@@ -172,53 +182,23 @@ function renderLists(lists) {
 
     actions.append(openBtn, shareBtn, deleteBtn);
 
-    // clicking the card (not actions) opens it
     card.onclick = (e) => { if (!e.target.closest('.actions')) location.href = `${location.pathname}?list=${l.id}`; };
 
-    // build card
     card.append(rowTop, meta, actions);
     listsGrid.appendChild(card);
-
-    // drag behavior
-    card.addEventListener('dragstart', (e) => {
-      card.classList.add('dragging');
-      e.dataTransfer.effectAllowed = 'move';
-    });
-    card.addEventListener('dragend', () => {
-      card.classList.remove('dragging');
-      persistOrder(); // save current DOM order
-    });
   }
 
-  // grid drag-over (position ghost)
-  listsGrid.ondragover = (e) => {
-    e.preventDefault();
-    const dragging = listsGrid.querySelector('.dragging');
-    if (!dragging) return;
-    const afterEl = getDragAfterElement(listsGrid, e.clientY);
-    if (afterEl == null) listsGrid.appendChild(dragging);
-    else listsGrid.insertBefore(dragging, afterEl);
-  };
-
+  // Enable long-press drag reorder on mobile + mouse drag fallback
+  enableLongPressReorder(listsGrid, '.card-list', persistListOrder);
   attachRipples();
 }
 
-function getDragAfterElement(container, y) {
-  const els = [...container.querySelectorAll('.card-list:not(.dragging)')];
-  return els.reduce((closest, child) => {
-    const box = child.getBoundingClientRect();
-    const offset = y - box.top - box.height / 2;
-    return (offset < 0 && offset > closest.offset) ? { offset, element: child } : closest;
-  }, { offset: Number.NEGATIVE_INFINITY }).element;
-}
-
-async function persistOrder() {
+async function persistListOrder() {
   const cards = [...listsGrid.querySelectorAll('.card-list')];
-  // Assign descending order_index so current visual order persists
   let base = Date.now() + 1000;
   for (let i = 0; i < cards.length; i++) {
     const id = cards[i].dataset.id;
-    const order_index = base - i; // descending
+    const order_index = base - i;
     await supabase.from('lists').update({ order_index }).eq('id', id);
   }
 }
@@ -227,11 +207,7 @@ function subscribeListsRealtime() {
   if (listsChannel) supabase.removeChannel(listsChannel);
   listsChannel = supabase
     .channel('lists_all')
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'lists' },
-      () => loadLists()
-    )
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'lists' }, () => loadLists())
     .subscribe();
 }
 
@@ -253,7 +229,8 @@ async function loadItemsAndRender() {
     .from('items')
     .select('*')
     .eq('list_id', listId)
-    .order('created_at', { ascending: true });
+    .order('order_index', { ascending: false })  // use custom order first
+    .order('created_at', { ascending: false });
   if (error) return console.error('Error loading items', error);
   renderItems(data || []);
 }
@@ -262,11 +239,7 @@ function subscribeItemsRealtime() {
   if (itemsChannel) supabase.removeChannel(itemsChannel);
   itemsChannel = supabase
     .channel(`list_${listId}`)
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'items', filter: `list_id=eq.${listId}` },
-      () => loadItemsAndRender()
-    )
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: `list_id=eq.${listId}` }, () => loadItemsAndRender())
     .subscribe();
 }
 
@@ -277,6 +250,7 @@ function renderItems(items) {
   for (const item of items) {
     const li = document.createElement('li');
     li.className = 'card';
+    li.dataset.id = item.id;
 
     const row = document.createElement('div');
     row.className = 'row';
@@ -307,6 +281,8 @@ function renderItems(items) {
     listEl.appendChild(li);
   }
 
+  // Enable long-press drag reorder for items
+  enableLongPressReorder(listEl, '.card', persistItemsOrder);
   attachRipples();
 }
 
@@ -317,7 +293,7 @@ async function addItem() {
   const now = new Date().toISOString();
   const { error } = await supabase.from('items').insert({
     list_id: listId, text: t, done: false, quantity: '', note: '',
-    created_at: now, updated_at: now,
+    created_at: now, updated_at: now, order_index: Date.now()
   });
   if (error) return alert('Error adding item: ' + error.message);
   inputEl.value = ''; inputEl.focus();
@@ -346,13 +322,23 @@ async function clearCompleted() {
   if (error) alert('Error clearing completed: ' + error.message);
 }
 
+async function persistItemsOrder() {
+  const cards = [...listEl.querySelectorAll('.card')];
+  let base = Date.now() + 1000;
+  for (let i = 0; i < cards.length; i++) {
+    const id = cards[i].dataset.id;
+    const order_index = base - i;
+    await supabase.from('items').update({ order_index }).eq('id', id);
+  }
+}
+
 /* ---------- Share & Nav ---------- */
 function share() {
   const url = location.href;
   if (navigator.clipboard && window.isSecureContext) {
     navigator.clipboard.writeText(url)
       .then(() => alert('Shareable link copied to clipboard'))
-      .catch(() => alert('Copy failed. Long-press and copy the URL.'));
+      .catch(() => alert('Copy failed. Long-press/copy the URL.'));
   } else {
     prompt('Copy this link:', url);
   }
@@ -379,13 +365,94 @@ async function showListView() {
   subscribeItemsRealtime();
 }
 
+/* ============================================================
+   Long-press reorder helper (touch & mouse)
+   ============================================================ */
+function enableLongPressReorder(container, itemSelector, onDrop) {
+  if (!container) return;
+
+  let pressTimer = null;
+  let dragging = null;
+  let startY = 0;
+  let moved = false;
+
+  const isInteractive = (el) => {
+    return el.closest('button, input, textarea, select, a, [contenteditable="true"]');
+  };
+
+  const pointerDown = (e) => {
+    const item = e.target.closest(itemSelector);
+    if (!item || isInteractive(e.target)) return;
+
+    startY = e.clientY || (e.touches && e.touches[0]?.clientY) || 0;
+    moved = false;
+
+    pressTimer = setTimeout(() => {
+      dragging = item;
+      dragging.classList.add('dragging');
+      // while dragging, block page scroll on touch
+      container.addEventListener('touchmove', preventScroll, { passive: false });
+    }, 300); // long-press threshold
+  };
+
+  const pointerMove = (e) => {
+    if (!pressTimer && !dragging) return;
+
+    const y = e.clientY || (e.touches && e.touches[0]?.clientY) || 0;
+    if (!dragging) {
+      // if user moves finger before long press triggers, cancel (they’re scrolling)
+      if (Math.abs(y - startY) > 8) {
+        clearTimeout(pressTimer); pressTimer = null;
+      }
+      return;
+    }
+
+    moved = true;
+    e.preventDefault();
+    const afterEl = getDragAfterElement(container, y, itemSelector);
+    if (!afterEl) container.appendChild(dragging);
+    else container.insertBefore(dragging, afterEl);
+  };
+
+  const pointerUp = async () => {
+    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+    if (dragging) {
+      dragging.classList.remove('dragging');
+      container.removeEventListener('touchmove', preventScroll);
+      dragging = null;
+      if (moved && typeof onDrop === 'function') await onDrop();
+      moved = false;
+    }
+  };
+
+  // event delegation
+  container.addEventListener('mousedown', pointerDown);
+  container.addEventListener('touchstart', pointerDown, { passive: true });
+  container.addEventListener('mousemove', pointerMove);
+  container.addEventListener('touchmove', pointerMove, { passive: false });
+  container.addEventListener('mouseup', pointerUp);
+  container.addEventListener('mouseleave', pointerUp);
+  container.addEventListener('touchend', pointerUp);
+  container.addEventListener('touchcancel', pointerUp);
+}
+
+function preventScroll(e) { e.preventDefault(); }
+
+function getDragAfterElement(container, y, itemSelector) {
+  const els = [...container.querySelectorAll(`${itemSelector}:not(.dragging)`)];
+
+  return els.reduce((closest, child) => {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    return (offset < 0 && offset > closest.offset) ? { offset, element: child } : closest;
+  }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+
 /* ---------- Ripples (material-ish) ---------- */
 function attachRipples() {
   document.querySelectorAll('button.btn, button.icon-btn').forEach(btn => {
-    // avoid duplicates
     if (btn.dataset.rippleAttached) return;
     btn.dataset.rippleAttached = '1';
-
     btn.addEventListener('click', function (e) {
       const rect = this.getBoundingClientRect();
       const circle = document.createElement('span');
