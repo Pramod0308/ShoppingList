@@ -3,39 +3,58 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Elements (home)
-const homeSection = document.getElementById('home');
-const listsGrid = document.getElementById('listsGrid');
-const newListNameEl = document.getElementById('newListName');
-const createListBtn = document.getElementById('createListBtn');
+/* ---------- Elements (HOME) ---------- */
+const homeSection      = document.getElementById('home');
+const listsGrid        = document.getElementById('listsGrid');
+const newListNameEl    = document.getElementById('newListName');
+const createListBtn    = document.getElementById('createListBtn');
+const themeToggle      = document.getElementById('themeToggle');
 
-// Elements (list view)
-const listView = document.getElementById('listView');
-const backHomeBtn = document.getElementById('backHome');
-const listNameEl = document.getElementById('listName');
-const shareBtn = document.getElementById('shareBtn');
-const inputEl = document.getElementById('itemInput');
-const addBtn = document.getElementById('addBtn');
-const remainingEl = document.getElementById('remaining');
-const clearAllBtn = document.getElementById('clearAll');
-const clearCompletedBtn = document.getElementById('clearCompleted');
-const listEl = document.getElementById('list');
+/* ---------- Elements (LIST VIEW) ---------- */
+const listView         = document.getElementById('listView');
+const backHomeBtn      = document.getElementById('backHome');
+const listNameEl       = document.getElementById('listName');
+const shareBtn         = document.getElementById('shareBtn');
+const themeToggle2     = document.getElementById('themeToggle2');
+const inputEl          = document.getElementById('itemInput');
+const addBtn           = document.getElementById('addBtn');
+const remainingEl      = document.getElementById('remaining');
+const clearAllBtn      = document.getElementById('clearAll');
+const clearCompletedBtn= document.getElementById('clearCompleted');
+const listEl           = document.getElementById('list');
 
-const qs = (k) => new URLSearchParams(location.search).get(k);
+/* ---------- Helpers ---------- */
+const qs  = (k) => new URLSearchParams(location.search).get(k);
 const fmt = (iso) => {
   const d = iso ? new Date(iso) : null;
   return d && !isNaN(d.getTime()) ? d.toLocaleString() : '…';
 };
+const root = document.documentElement;
 
 let listId = qs('list');
 let itemsChannel = null;
 let listsChannel = null;
 
-/* ----------------------- HOME (lists) ----------------------- */
+/* ============================================================
+   THEME (dark / light)
+   ============================================================ */
+function applyTheme(t) {
+  if (t === 'dark') root.classList.add('dark'); else root.classList.remove('dark');
+  localStorage.setItem('theme', t);
+}
+const storedTheme = localStorage.getItem('theme')
+  || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+applyTheme(storedTheme);
+[themeToggle, themeToggle2].forEach(b => b && (b.onclick = () => {
+  applyTheme(root.classList.contains('dark') ? 'light' : 'dark');
+}));
 
+/* ============================================================
+   HOME (lists)
+   ============================================================ */
 async function createList() {
   const name = (newListNameEl?.value || '').trim() || 'My Shopping List';
-  const now = new Date().toISOString();
+  const now  = new Date().toISOString();
   const order = Date.now(); // newest on top
   const { data, error } = await supabase
     .from('lists')
@@ -97,37 +116,27 @@ function renderLists(lists) {
     return;
   }
 
-  // Render cards
   for (const l of lists) {
     const card = document.createElement('div');
     card.className = 'card-list';
     card.draggable = true;
     card.dataset.id = l.id;
-    card.dataset.order = String(l.order_index);
 
-    // drag handle + title (editable)
+    // top row: drag + editable title
     const rowTop = document.createElement('div');
     rowTop.className = 'row-top';
 
     const drag = document.createElement('div');
     drag.className = 'drag';
+    drag.innerHTML = '<span class="material-symbols-outlined">drag_indicator</span>';
     drag.title = 'Drag to reorder';
-    drag.textContent = '⋮⋮';
 
     const title = document.createElement('h3');
     title.textContent = l.name || 'Untitled list';
-    title.title = 'Click to rename. Press Enter to save.';
+    title.title = 'Double-click to rename. Press Enter to save.';
     title.contentEditable = 'false';
-
-    title.addEventListener('dblclick', () => {
-      title.contentEditable = 'true';
-      title.focus();
-      document.execCommand('selectAll', false, null);
-    });
-    title.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); title.blur(); }
-      if (e.key === 'Escape') { title.contentEditable = 'false'; title.blur(); }
-    });
+    title.addEventListener('dblclick', () => { title.contentEditable = 'true'; title.focus(); document.execCommand('selectAll', false, null); });
+    title.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); title.blur(); } if (e.key === 'Escape') { title.contentEditable = 'false'; title.blur(); } });
     title.addEventListener('blur', () => {
       if (title.isContentEditable) {
         title.contentEditable = 'false';
@@ -137,66 +146,61 @@ function renderLists(lists) {
 
     rowTop.append(drag, title);
 
+    // meta
     const meta = document.createElement('div');
     meta.className = 'muted';
     meta.textContent = `Updated: ${fmt(l.updated_at)} • Created: ${fmt(l.created_at)}`;
 
+    // actions
     const actions = document.createElement('div');
     actions.className = 'actions';
 
     const openBtn = document.createElement('button');
     openBtn.className = 'icon-btn primary';
-    openBtn.textContent = 'Open';
-    openBtn.onclick = (e) => {
-      e.stopPropagation();
-      location.href = `${location.pathname}?list=${l.id}`;
-    };
+    openBtn.innerHTML = '<span class="material-symbols-outlined">open_in_new</span> Open';
+    openBtn.onclick = (e) => { e.stopPropagation(); location.href = `${location.pathname}?list=${l.id}`; };
 
     const shareBtn = document.createElement('button');
     shareBtn.className = 'icon-btn';
-    shareBtn.textContent = 'Share';
+    shareBtn.innerHTML = '<span class="material-symbols-outlined">share</span> Share';
     shareBtn.onclick = (e) => { e.stopPropagation(); shareList(l.id); };
 
     const deleteBtn = document.createElement('button');
     deleteBtn.className = 'icon-btn';
-    deleteBtn.textContent = 'Delete';
+    deleteBtn.innerHTML = '<span class="material-symbols-outlined">delete</span> Delete';
     deleteBtn.onclick = (e) => { e.stopPropagation(); deleteList(l.id); };
 
     actions.append(openBtn, shareBtn, deleteBtn);
 
-    // Clicking card (except buttons) opens
-    card.onclick = (e) => {
-      if (e.target.closest('.actions')) return;
-      location.href = `${location.pathname}?list=${l.id}`;
-    };
+    // clicking the card (not actions) opens it
+    card.onclick = (e) => { if (!e.target.closest('.actions')) location.href = `${location.pathname}?list=${l.id}`; };
 
+    // build card
     card.append(rowTop, meta, actions);
     listsGrid.appendChild(card);
 
-    // Drag & drop events
+    // drag behavior
     card.addEventListener('dragstart', (e) => {
       card.classList.add('dragging');
-      e.dataTransfer.setData('text/plain', l.id);
       e.dataTransfer.effectAllowed = 'move';
     });
     card.addEventListener('dragend', () => {
       card.classList.remove('dragging');
-      persistOrder();
+      persistOrder(); // save current DOM order
     });
   }
 
-  // Grid drag-over to visually re-order
-  listsGrid.addEventListener('dragover', (e) => {
+  // grid drag-over (position ghost)
+  listsGrid.ondragover = (e) => {
     e.preventDefault();
     const dragging = listsGrid.querySelector('.dragging');
     if (!dragging) return;
     const afterEl = getDragAfterElement(listsGrid, e.clientY);
-    if (afterEl == null) {
-      listsGrid.appendChild(dragging);
-    } else {
-      listsGrid.insertBefore(dragging, afterEl);
-    }
-  }, { once: true }); // reattach each render
+    if (afterEl == null) listsGrid.appendChild(dragging);
+    else listsGrid.insertBefore(dragging, afterEl);
+  };
+
+  attachRipples();
 }
 
 function getDragAfterElement(container, y) {
@@ -204,22 +208,18 @@ function getDragAfterElement(container, y) {
   return els.reduce((closest, child) => {
     const box = child.getBoundingClientRect();
     const offset = y - box.top - box.height / 2;
-    if (offset < 0 && offset > closest.offset) {
-      return { offset, element: child };
-    } else {
-      return closest;
-    }
+    return (offset < 0 && offset > closest.offset) ? { offset, element: child } : closest;
   }, { offset: Number.NEGATIVE_INFINITY }).element;
 }
 
 async function persistOrder() {
   const cards = [...listsGrid.querySelectorAll('.card-list')];
-  const updates = cards.map((c, i) => ({
-    id: c.dataset.id,
-    order_index: Date.now() + (cards.length - i) // keep current order newest on top feel
-  }));
-  for (const u of updates) {
-    await supabase.from('lists').update({ order_index: u.order_index }).eq('id', u.id);
+  // Assign descending order_index so current visual order persists
+  let base = Date.now() + 1000;
+  for (let i = 0; i < cards.length; i++) {
+    const id = cards[i].dataset.id;
+    const order_index = base - i; // descending
+    await supabase.from('lists').update({ order_index }).eq('id', id);
   }
 }
 
@@ -235,8 +235,9 @@ function subscribeListsRealtime() {
     .subscribe();
 }
 
-/* ----------------------- LIST VIEW (items) ----------------------- */
-
+/* ============================================================
+   LIST VIEW (items)
+   ============================================================ */
 async function loadListName() {
   const { data } = await supabase.from('lists').select('name').eq('id', listId).single();
   if (data) listNameEl.value = data.name || 'Shopping List';
@@ -249,7 +250,9 @@ async function saveListName() {
 
 async function loadItemsAndRender() {
   const { data, error } = await supabase
-    .from('items').select('*').eq('list_id', listId)
+    .from('items')
+    .select('*')
+    .eq('list_id', listId)
     .order('created_at', { ascending: true });
   if (error) return console.error('Error loading items', error);
   renderItems(data || []);
@@ -303,10 +306,11 @@ function renderItems(items) {
     li.append(row, meta);
     listEl.appendChild(li);
   }
+
+  attachRipples();
 }
 
-/* ----------------------- Item ops ----------------------- */
-
+/* ---------- Item Ops ---------- */
 async function addItem() {
   const t = inputEl.value.trim();
   if (!t) return;
@@ -342,8 +346,7 @@ async function clearCompleted() {
   if (error) alert('Error clearing completed: ' + error.message);
 }
 
-/* ----------------------- Share / Nav ----------------------- */
-
+/* ---------- Share & Nav ---------- */
 function share() {
   const url = location.href;
   if (navigator.clipboard && window.isSecureContext) {
@@ -359,8 +362,9 @@ function goHome() {
   showHome();
 }
 
-/* ----------------------- Mode switch ----------------------- */
-
+/* ============================================================
+   Mode switch
+   ============================================================ */
 function showHome() {
   homeSection.style.display = '';
   listView.style.display = 'none';
@@ -375,19 +379,38 @@ async function showListView() {
   subscribeItemsRealtime();
 }
 
-/* ----------------------- Wire UI ----------------------- */
+/* ---------- Ripples (material-ish) ---------- */
+function attachRipples() {
+  document.querySelectorAll('button.btn, button.icon-btn').forEach(btn => {
+    // avoid duplicates
+    if (btn.dataset.rippleAttached) return;
+    btn.dataset.rippleAttached = '1';
 
-if (createListBtn) createListBtn.onclick = createList;
-if (backHomeBtn) backHomeBtn.onclick = goHome;
+    btn.addEventListener('click', function (e) {
+      const rect = this.getBoundingClientRect();
+      const circle = document.createElement('span');
+      const size = Math.max(rect.width, rect.height);
+      circle.style.width = circle.style.height = size + 'px';
+      circle.style.left = (e.clientX - rect.left - size/2) + 'px';
+      circle.style.top  = (e.clientY - rect.top  - size/2) + 'px';
+      circle.className = 'ripple';
+      this.appendChild(circle);
+      setTimeout(() => circle.remove(), 550);
+    });
+  });
+}
 
-if (addBtn) addBtn.onclick = addItem;
-if (clearAllBtn) clearAllBtn.onclick = clearAll;
-if (clearCompletedBtn) clearCompletedBtn.onclick = clearCompleted;
-if (shareBtn) shareBtn.onclick = share;
-if (listNameEl) listNameEl.addEventListener('blur', saveListName);
+/* ---------- Wire UI ---------- */
+if (createListBtn)      createListBtn.onclick = createList;
+if (backHomeBtn)        backHomeBtn.onclick = goHome;
 
-/* ----------------------- Init ----------------------- */
+if (addBtn)             addBtn.onclick = addItem;
+if (clearAllBtn)        clearAllBtn.onclick = clearAll;
+if (clearCompletedBtn)  clearCompletedBtn.onclick = clearCompleted;
+if (shareBtn)           shareBtn.onclick = share;
+if (listNameEl)         listNameEl.addEventListener('blur', saveListName);
 
+/* ---------- Init ---------- */
 (async function init() {
   listId = qs('list');
   if (!listId) showHome();
