@@ -169,5 +169,37 @@ input:focus, button:focus { outline: 2px solid rgba(0,0,0,0.1); outline-offset: 
   .icon-btn, .btn { padding: 10px 12px; }
   .row { gap: 8px; }
 }
+/* --- Appbar: keep actions inside on small screens --- */
+.appbar { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+.appbar .left { display:flex; align-items:center; gap:8px; min-width:0; flex:1 1 auto; }
+.title.editable { flex:1 1 200px; min-width:0; max-width:100%; text-overflow:ellipsis; overflow:hidden; }
+
+/* Actions never overflow; shrink nicely */
+.appbar-actions { display:flex; gap:8px; flex:0 0 auto; }
+
+/* Make icon buttons compact on phones */
+@media (max-width: 560px) {
+  .app { padding: 12px; }
+  .icon-btn, .btn { padding: 10px 12px; }
+  .appbar-actions { gap:6px; }
+  .title { font-size:20px; }
+  .cards-grid { grid-template-columns: 1fr; }
+}
+
+/* --- Item drag handle (6 dots) --- */
+.drag, .drag.handle {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:28px; height:28px; border-radius:8px; cursor:grab; user-select:none; opacity:.8;
+}
+.drag .material-symbols-outlined,
+.drag.handle .material-symbols-outlined { font-size:20px; }
+.drag:active, .drag.handle:active { cursor:grabbing; }
+.row .drag.handle { margin-right:4px; }
+
+/* While dragging */
+.card.dragging, .card-list.dragging { opacity:.6; transform:scale(.995); }
+
+/* Hide timestamps but keep handle visible */
+.hide-meta .metaRow { display:none; }
 
 
