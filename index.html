@@ -40,11 +40,14 @@
       </header>
 
       <section class="composer">
-        <input id="newListName" class="input" placeholder="New list name" />
-        <button id="createListBtn" class="btn primary">
-          <span class="material-symbols-outlined">add</span>&nbsp;Create
+        <textarea id="itemInput" class="input textarea"
+          placeholder="Add an item… (Enter = add, Shift+Enter = new line)"
+          rows="1"></textarea>
+        <button id="addBtn" class="btn primary">
+          <span class="material-symbols-outlined">add</span>&nbsp;Add
         </button>
       </section>
+
 
       <div id="listsGrid" class="cards-grid"></div>
     </section>
