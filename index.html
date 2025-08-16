@@ -2,18 +2,25 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  />
   <title>Shopping List</title>
 
-  <!-- PWA -->
+  <!-- PWA / Icons -->
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#2563eb" />
-  <link rel="icon" href="icons/icon-192.png" />
-  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png" />
+  <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png" />
 
   <!-- Fonts & Icons -->
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Material+Symbols+Outlined" rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Material+Symbols+Outlined"
+    rel="stylesheet"
+  />
 
   <!-- Styles -->
   <link rel="stylesheet" href="styles.css" />
@@ -94,7 +101,7 @@
 
   <noscript>This app needs JavaScript enabled.</noscript>
 
-  <!-- Service worker registration (kept here so it runs even if modules fail) -->
+  <!-- Service worker -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
