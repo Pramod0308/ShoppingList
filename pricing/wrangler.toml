@@ -1,0 +1,15 @@
+name = "shoppinglist-prices"
+main = "worker.mjs"
+compatibility_date = "2026-01-01"
+
+[vars]
+# Lock this to your own site once deployed, e.g.
+# ALLOWED_ORIGINS = "https://pramod0308.github.io"
+ALLOWED_ORIGINS = "*"
+
+# Optional: pin ALDI availability to a Milton Keynes store.
+# Get the id from: node pricing/cli.mjs --store MK9 milk
+# ALDI_SERVICE_POINT = ""
+
+# Optional: prices you recorded in store, as a JSON string.
+# PRICEBOOK = '{"milk":{"lidl":{"pence":145,"size":"3.408L"}}}'

@@ -1,0 +1,3 @@
+{
+  "_comment": "Prices you have seen in store. Keys are matched against the normalised search query. Delete this _comment key whenever you like. Add entries with: node pricing/cli.mjs --add \"oats|lidl|90|1kg|Lidl Bletchley\""
+}

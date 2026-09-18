@@ -1,0 +1,13 @@
+{
+  "name": "shoppinglist-pricing",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Fetch and compare ALDI and LIDL UK grocery prices for a shopping list",
+  "scripts": {
+    "probe": "node probe.mjs",
+    "compare": "node cli.mjs",
+    "test": "node --test \"test/*.test.mjs\"",
+    "deploy": "wrangler deploy"
+  }
+}

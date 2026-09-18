@@ -1,4 +1,5 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase-config.js';
+import { openPriceCompare } from './prices-ui.js';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -15,6 +16,7 @@ const listView          = document.getElementById('listView');
 const backHomeBtn       = document.getElementById('backHome');
 const listNameEl        = document.getElementById('listName');
 const shareBtn          = document.getElementById('shareBtn');
+const pricesBtn         = document.getElementById('pricesBtn');
 const themeToggle2      = document.getElementById('themeToggle2');
 const toggleDatesBtn    = document.getElementById('toggleDates');
 const inputEl           = document.getElementById('itemInput');      // textarea (Keep-like)
@@ -687,6 +689,8 @@ if (addBtn)             addBtn.onclick = addFromTextarea;
 if (clearAllBtn)        clearAllBtn.onclick = clearAll;
 if (clearCompletedBtn)  clearCompletedBtn.onclick = clearCompleted;
 if (shareBtn)           shareBtn.onclick = share;
+if (pricesBtn)          pricesBtn.onclick = () =>
+  openPriceCompare(itemsCache.filter(i => !i.done).map(i => i.text));
 if (listNameEl)         listNameEl.addEventListener('blur', saveListName);
 
 /* ---------- Init ---------- */

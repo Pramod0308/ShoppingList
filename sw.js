@@ -1,4 +1,4 @@
-const CACHE = 'shopping-list-cache-v21'; // bump this when you deploy changes
+const CACHE = 'shopping-list-cache-v22'; // bump this when you deploy changes
 const ASSETS = [
   './',
   './index.html',
@@ -6,6 +6,8 @@ const ASSETS = [
   './styles.css',
   './app.js',
   './supabase-config.js',
+  './prices-ui.js',
+  './pricing-config.js',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',
@@ -35,6 +37,11 @@ self.addEventListener('fetch', (e) => {
   // Never intercept Supabase API traffic
   if (url.hostname.endsWith('.supabase.co')) {
     return; // let it hit network directly
+  }
+
+  // Price lookups are live data — always go to the network
+  if (url.pathname.startsWith('/api/prices')) {
+    return;
   }
 
   // Network-first for app shell & code to avoid stale JS
